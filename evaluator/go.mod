@@ -1,4 +1,4 @@
-module evaluator
+module github.com/Harishtessell/opatest/evaluator
 
 go 1.24.2
 
