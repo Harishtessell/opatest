@@ -11,7 +11,7 @@ func Evaluate(ctx context.Context, query string, input map[string]interface{}) (
 	// Load Rego modules from the current directory
 	r := rego.New(
 		rego.Query(query),
-		rego.Load([]string{"../authz.rego"}, nil),
+		rego.Load([]string{"authz.rego"}, nil),
 	)
 
 	// Prepare the query for evaluation
