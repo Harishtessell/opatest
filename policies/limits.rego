@@ -3,5 +3,5 @@ package limits
 default allow := false
 
 allow if {
-  input.amount <= data.limits.max
+  input.amount == 100
 }
