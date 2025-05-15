@@ -2,33 +2,45 @@ package evaluator
 
 import (
 	"context"
+	"embed"
 	"fmt"
 
+	"github.com/open-policy-agent/opa/v1/ast"
 	"github.com/open-policy-agent/opa/v1/rego"
 )
 
+//go:embed authz.rego
+var regoFiles embed.FS
+
 func Evaluate(ctx context.Context, query string, input map[string]interface{}) (interface{}, error) {
-	// Load Rego modules from the current directory
+	// Step 1: Read the embedded rego policy
+	policyBytes, err := regoFiles.ReadFile("authz.rego")
+	if err != nil {
+		return nil, fmt.Errorf("failed to read embedded rego file: %w", err)
+	}
+
+	// Step 2: Parse the module
+	module, err := ast.ParseModule("authz.rego", string(policyBytes))
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse rego module: %w", err)
+	}
+
+	// Step 3: Pass the parsed module directly
 	r := rego.New(
 		rego.Query(query),
-		rego.Load([]string{"authz.rego"}, nil),
+		rego.ParsedModule(module), // ✅ use singular ParsedModule (v1.x)
 	)
 
-	// Prepare the query for evaluation
-	preparedQuery, err := r.PrepareForEval(ctx)
+	prepared, err := r.PrepareForEval(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to prepare query: %w", err)
+		return nil, fmt.Errorf("prepare failed: %w", err)
 	}
 
-	// Evaluate the prepared query with the provided input
-	results, err := preparedQuery.Eval(ctx, rego.EvalInput(input))
-	if err != nil {
-		return nil, fmt.Errorf("failed to evaluate query: %w", err)
+	// Step 4: Evaluate with input
+	rs, err := prepared.Eval(ctx, rego.EvalInput(input))
+	if err != nil || len(rs) == 0 || len(rs[0].Expressions) == 0 {
+		return nil, fmt.Errorf("policy evaluation failed: %w", err)
 	}
 
-	if len(results) == 0 || len(results[0].Expressions) == 0 {
-		return nil, fmt.Errorf("no result returned from evaluation")
-	}
-
-	return results[0].Expressions[0].Value, nil
+	return rs[0].Expressions[0].Value, nil
 }
