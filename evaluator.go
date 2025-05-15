@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 
 	"github.com/open-policy-agent/opa/v1/rego"
+	"github.com/open-policy-agent/opa/v1/storage/inmem"
 )
 
 //go:embed policies/*.rego policies/data.json
@@ -36,22 +37,21 @@ func Evaluate(ctx context.Context, query string, input map[string]interface{}) (
 		return nil, fmt.Errorf("rego file loading failed: %w", err)
 	}
 
-	// Step 2: Convert data.json to a module to populate data.*
+	// Step 2: Load data.json into in-memory store
 	dataBytes, err := policyFS.ReadFile("policies/data.json")
 	if err != nil {
 		return nil, fmt.Errorf("failed to read data.json: %w", err)
 	}
 
-	var rawData map[string]interface{}
-	if err := json.Unmarshal(dataBytes, &rawData); err != nil {
+	var data map[string]interface{}
+	if err := json.Unmarshal(dataBytes, &data); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal data.json: %w", err)
 	}
 
-	dataStr, _ := json.Marshal(rawData)
-	// We inject it as a virtual module that assigns to data via __data__ trick
-	regoOptions = append(regoOptions, rego.Module("data.json", fmt.Sprintf("package data\n__data__ := %s", dataStr)))
+	store := inmem.NewFromObject(data)
+	regoOptions = append(regoOptions, rego.Store(store))
 
-	// Step 3: Prepare and evaluate with the user's input
+	// Step 3: Create and evaluate
 	r := rego.New(regoOptions...)
 
 	prepared, err := r.PrepareForEval(ctx)
